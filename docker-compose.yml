@@ -47,13 +47,8 @@ services:
   caddy:
     image: caddy:2-alpine
     container_name: despensaviva_caddy
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
     environment:
-      # Domínio público (ajuste no Caddyfile se preferir)
-      DOMAIN: ${DOMAIN:-despensa.seu-dominio.com.br}
+      DOMAIN: ${DOMAIN:-despensa.wikicode.com.br}
     volumes:
       - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -61,6 +56,17 @@ services:
     depends_on:
       - web
       - backend
+    restart: unless-stopped
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared-wikicode-despensa
+    depends_on:
+      - caddy
+    environment:
+      TUNNEL_TOKEN: eyJhIjoiNWM2ZWJlMGNiMTdkNGFlNjc3NTg1MzM3YmE3MjVjM2EiLCJ0IjoiYWZkY2NjYzYtODdkNC00N2Y4LTg0NTUtMmI4ZjQ2MDQ0OWUwIiwicyI6IlpUUTFOakJoT1RRdFlUSXlZUzAwTTJZeUxUa3hPVGd0TVdFelkySTNOR1U1TlRBeiJ9
+    command: tunnel --no-autoupdate run
+    network_mode: "service:caddy"
     restart: unless-stopped
 
 volumes:

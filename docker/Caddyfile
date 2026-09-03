@@ -1,17 +1,7 @@
 # DespensaViva - Caddy proxy reverso
-# Serve o app web e a API com HTTPS automatico.
+# Cloudflare cuida do HTTPS. Caddy serve HTTP interno.
 
-# No ambiente local (sem DNS apontado) use localhost:
-# localhost {
-#     handle /api/* {
-#         reverse_proxy backend:3007
-#     }
-#     handle {
-#         reverse_proxy web:80
-#     }
-# }
-
-{$DOMAIN} {
+:3007 {
     # API
     handle /api/* {
         reverse_proxy backend:3007

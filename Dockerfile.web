@@ -1,18 +1,20 @@
 # Syntax= docker/dockerfile:1
 
 # ---------- 1. Build do Flutter Web ----------
-FROM ghcr.io/cirruslabs/flutter:stable AS build-web
+FROM ghcr.io/gmeligio/flutter-web:3.47.2 AS build-web
+
+USER root
+RUN git config --global --add safe.directory /home/flutter/sdks/flutter
 
 WORKDIR /src/app
 
-# Aproveita o cache de dependências do pub
 COPY app/pubspec.yaml app/pubspec.lock* ./
 RUN flutter pub get
 
-# Código-fonte
 COPY app/ .
+RUN chown -R flutter:flutter /src/app
 
-# Compila o web apontando a API para o mesmo domínio (proxy /api via Nginx)
+USER flutter
 RUN flutter build web --release --dart-define=API_URL=/api
 
 # ---------- 2. Servidor web (Nginx) ----------
