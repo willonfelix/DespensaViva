@@ -77,7 +77,9 @@ router.post('/login', async (req, res, next) => {
 router.get('/me', requireAuth, async (req, res, next) => {
   try {
     const result = await db.query(
-      'SELECT id, email, name, created_at FROM users WHERE id = $1',
+      `SELECT id, email, name, created_at,
+              gemini_api_key IS NOT NULL AND gemini_api_key <> '' AS has_gemini_key
+       FROM users WHERE id = $1`,
       [req.userId]
     );
     if (result.rows.length === 0) {
