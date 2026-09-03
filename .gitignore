@@ -1,0 +1,106 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# VS Code
+.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.flutter-plugins
+.pub-cache/
+.pub/
+/build/
+/coverage/
+pubspec.lock
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio build artifacts
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Widget Preview related
+.widget_preview/
+
+# Android
+gradle-wrapper.jar
+/.gradle
+/captures/
+/android/gradlew
+/android/gradlew.bat
+/android/local.properties
+**/*.keystore
+**/*.jks
+key.properties
+
+# iOS
+/ios/Pods/
+/ios/.symlinks/
+/ios/Flutter/Flutter.framework
+/ios/Flutter/Flutter.podspec
+/ios/Flutter/Generated.xcconfig
+/ios/Flutter/app.framework
+/ios/Flutter/flutter_export_environment.sh
+/ios/Runner.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+
+# macOS
+/macos/Pods/
+/macos/Flutter/GeneratedPluginRegistrant.swift
+
+# Linux
+/linux/flutter/ephemeral/
+
+# Web
+/web/favicon.png
+/web/icons/Icon-192.png
+/web/icons/Icon-512.png
+/web/icons/Icon-maskable-192.png
+/web/icons/Icon-maskable-512.png
+/web/manifest.json
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+*.iml
+.idea/
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Documentation
+CONTEXTO.md
+Spec-inicial.md
+Tarefas-realizadas.md
+Tela-cadastro-novos-produtos.md
+Tela-compra-automatica.md
+Tela-principal.md

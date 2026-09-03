@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+
+# Sensível
+backend/.env
+*.pem
+*.key
+
+# Node
+**/node_modules
+**/npm-debug.log
+
+# Flutter / Dart
+app/build
+app/.dart_tool
+app/.flutter-plugins
+app/.packages
+app/android/.gradle
+app/ios/Pods
+*.iml
+
+# IDE / SO
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Documentos de design
+*.md
+Script-database.txt
+Spec-inicial.txt
+Tarefas-realizadas.txt
+Tela-*.txt
+evolucoes/

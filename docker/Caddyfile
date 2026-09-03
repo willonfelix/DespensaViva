@@ -1,0 +1,31 @@
+# DespensaViva - Caddy proxy reverso
+# Serve o app web e a API com HTTPS automatico.
+
+# No ambiente local (sem DNS apontado) use localhost:
+# localhost {
+#     handle /api/* {
+#         reverse_proxy backend:3007
+#     }
+#     handle {
+#         reverse_proxy web:80
+#     }
+# }
+
+{$DOMAIN} {
+    # API
+    handle /api/* {
+        reverse_proxy backend:3007
+    }
+
+    # App web (Nginx serve os estáticos do Flutter)
+    handle {
+        reverse_proxy web:80
+    }
+
+    # headers de segurança
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options SAMEORIGIN
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+}
