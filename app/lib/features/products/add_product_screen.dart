@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/date_formatter.dart';
+import '../../models/product_suggestion.dart';
 import '../products/catalog_controller.dart';
 import '../pantry/pantry_controller.dart';
+import 'barcode_controller.dart';
+import 'barcode_scanner_screen.dart';
 
 class AddProductScreen extends ConsumerStatefulWidget {
   const AddProductScreen({super.key});
@@ -18,6 +21,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   final _nameController = TextEditingController();
   final _quantityController = TextEditingController();
   final _minQuantityController = TextEditingController();
+  final _codeController = TextEditingController();
 
   int? _selectedCategoryId;
   String _selectedUnit = 'unidade';
@@ -35,7 +39,37 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     _nameController.dispose();
     _quantityController.dispose();
     _minQuantityController.dispose();
+    _codeController.dispose();
     super.dispose();
+  }
+
+  void _applySuggestion() {
+    final suggestion = ref.read(barcodeControllerProvider).suggestion;
+    if (suggestion == null) return;
+    setState(() {
+      if (suggestion.name.isNotEmpty) _nameController.text = suggestion.name;
+      if (suggestion.categoryId != null) _selectedCategoryId = suggestion.categoryId;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Dados do produto preenchidos. Revise antes de salvar.')),
+    );
+  }
+
+  void _openScanner() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
+    );
+  }
+
+  Future<void> _searchCode() async {
+    final code = _codeController.text.trim();
+    if (code.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Digite o código de barras para buscar.')),
+      );
+      return;
+    }
+    await ref.read(barcodeControllerProvider.notifier).searchByCode(code);
   }
 
   Future<void> _selectExpirationDate(BuildContext context) async {
@@ -92,6 +126,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   Widget build(BuildContext context) {
     final catalog = ref.watch(catalogControllerProvider);
     final categories = catalog.categories;
+    final barcode = ref.watch(barcodeControllerProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -105,6 +140,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              _barcodeSection(barcode),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _nameController,
                 textCapitalization: TextCapitalization.words,
@@ -225,10 +262,156 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     );
   }
 
+  Widget _barcodeSection(BarcodeState barcode) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Escanear ou buscar produto',
+          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _codeController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Código de barras',
+                  hintText: 'Ex: 7891234567890',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  prefixIcon: const Icon(Icons.barcode_reader),
+                ),
+                onSubmitted: (_) => _searchCode(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton.filled(
+              tooltip: 'Escanear com a câmera',
+              onPressed: _openScanner,
+              icon: const Icon(Icons.photo_camera_outlined),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: barcode.searching ? null : _searchCode,
+          icon: barcode.searching
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                )
+              : const Icon(Icons.search),
+          label: const Text('Buscar na internet'),
+        ),
+        const SizedBox(height: 8),
+        if (barcode.searched && barcode.error != null)
+          _BarcodeResult(
+            icon: Icons.error_outline,
+            message: barcode.error!,
+            color: Colors.red.shade700,
+          ),
+        if (barcode.suggestion != null)
+          _BarcodeResult(
+            suggestion: barcode.suggestion!,
+          ),
+        if (barcode.suggestion != null) ...[
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: _applySuggestion,
+            icon: const Icon(Icons.auto_fix_high),
+            label: const Text('Usar dados do produto encontrado'),
+          ),
+        ],
+        const Divider(height: 32),
+      ],
+    );
+  }
+
   String? _decimalValidator(String? value) {
     final v = value ?? '';
     if (v.trim().isEmpty) return 'Obrigatório';
     if (double.tryParse(v.replaceAll(',', '.')) == null) return 'Valor inválido';
     return null;
+  }
+}
+
+class _BarcodeResult extends StatelessWidget {
+  final IconData? icon;
+  final String? message;
+  final Color? color;
+  final ProductSuggestion? suggestion;
+
+  const _BarcodeResult({
+    this.icon,
+    this.message,
+    this.color,
+    this.suggestion,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = suggestion;
+    if (s != null) {
+      return Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              if (s.imageUrl != null) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    s.imageUrl!,
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Icon(Icons.image_not_supported_outlined),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Encontrado: ${s.name}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    if (s.brand != null)
+                      Text(s.brand!, style: TextStyle(color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final c = color ?? Colors.red.shade700;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: c.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(icon ?? Icons.error_outline, color: c),
+          const SizedBox(width: 10),
+          Expanded(child: Text(message ?? '')),
+        ],
+      ),
+    );
   }
 }
