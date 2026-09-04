@@ -145,6 +145,36 @@ class _PantryCard extends ConsumerWidget {
 
   const _PantryCard({required this.item});
 
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Excluir "${item.name}"?'),
+        content: const Text('Este item será removido da dispensa. Essa ação não pode ser desfeita.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await ref.read(pantryControllerProvider.notifier).remove(item.id);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Item removido da dispensa.'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isLowStock = item.isLowStock;
@@ -227,6 +257,11 @@ class _PantryCard extends ConsumerWidget {
                       ref.read(pantryControllerProvider.notifier).increment(item),
                 ),
               ],
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              color: Colors.red.shade400,
+              onPressed: () => _confirmDelete(context, ref),
             ),
           ],
         ),
