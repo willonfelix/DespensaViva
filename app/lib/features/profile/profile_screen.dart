@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_controller.dart';
+import '../pantry/pantry_controller.dart';
 import 'profile_controller.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -18,6 +19,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _geminiKey = TextEditingController();
   bool _obscurePass = true;
   bool _obscureKey = true;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      ref.read(pantryControllerProvider.notifier).load();
+      ref.read(profileControllerProvider.notifier).loadAudit();
+    });
+  }
 
   @override
   void dispose() {
@@ -105,6 +115,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+            _buildPendingCard(),
             const SizedBox(height: 16),
             Card(
               child: Padding(
@@ -208,10 +220,151 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+            _buildAuditCard(theme),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildPendingCard() {
+    final theme = Theme.of(context);
+    final pantryState = ref.watch(pantryControllerProvider);
+    final pending = pantryState.pending;
+    final profileLoading = ref.watch(profileControllerProvider).loading;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.pending_actions, color: Colors.amber.shade800, size: 22),
+                const SizedBox(width: 8),
+                Text('Alterações na dispensa', style: theme.textTheme.titleMedium),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (pending.isEmpty)
+              const Text(
+                'Nenhuma alteração pendente.',
+                style: TextStyle(color: Colors.grey),
+              )
+            else ...[
+              ...pending.map((p) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    leading: const Icon(Icons.receipt_long),
+                    title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: Text(
+                      '${PantryController.format(p.currentQuantity, p.unitOfMeasure)} → '
+                      '${PantryController.format(p.newQuantity, p.unitOfMeasure)}',
+                      style: TextStyle(color: Colors.amber.shade900),
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close, size: 20),
+                      tooltip: 'Cancelar',
+                      onPressed: profileLoading
+                          ? null
+                          : () => ref.read(pantryControllerProvider.notifier).cancelPending(p.id),
+                    ),
+                  )),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: profileLoading
+                    ? null
+                    : () => ref.read(profileControllerProvider.notifier).confirmPending(),
+                icon: const Icon(Icons.check_circle_outline),
+                label: Text('Confirmar alterações (${pending.length})'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAuditCard(ThemeData theme) {
+    final logs = ref.watch(profileControllerProvider).logs;
+    final loadingAudit = ref.watch(profileControllerProvider).loadingAudit;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.history, color: theme.colorScheme.primary, size: 22),
+                const SizedBox(width: 8),
+                Text('Histórico de auditoria', style: theme.textTheme.titleMedium),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (loadingAudit)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (logs.isEmpty)
+              const Text(
+                'Nenhuma operação registrada.',
+                style: TextStyle(color: Colors.grey),
+              )
+            else
+              ...logs.take(50).map((log) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    leading: Icon(_auditIcon(log.action), color: _auditColor(log.action), size: 22),
+                    title: Text(
+                      '${log.itemName.isNotEmpty ? log.itemName : ''} ${log.title}'.trim(),
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                    ),
+                    subtitle: Text(_formatDate(log.createdAt)),
+                  )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _auditIcon(String action) {
+    switch (action) {
+      case 'auth.login':
+        return Icons.login;
+      case 'pantry.quantity_change':
+        return Icons.swap_horiz;
+      case 'pantry.add':
+        return Icons.add_circle_outline;
+      case 'pantry.delete':
+        return Icons.delete_outline;
+      default:
+        return Icons.info_outline;
+    }
+  }
+
+  Color _auditColor(String action) {
+    switch (action) {
+      case 'auth.login':
+        return Colors.blue;
+      case 'pantry.quantity_change':
+        return Colors.orange;
+      case 'pantry.add':
+        return Colors.green;
+      case 'pantry.delete':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _formatDate(DateTime dt) {
+    final two = (int v) => v.toString().padLeft(2, '0');
+    return '${two(dt.day)}/${two(dt.month)}/${dt.year} ${two(dt.hour)}:${two(dt.minute)}';
   }
 
   Widget _passwordField({

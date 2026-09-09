@@ -16,6 +16,13 @@ RUN chown -R flutter:flutter /src/app
 
 USER flutter
 RUN flutter build web --release --dart-define=API_URL=/api
+# Entrypoints do Flutter têm URL FIXA (main.dart.js, flutter_bootstrap.js).
+# O build-id do Flutter (.last_build_id) NÃO muda entre builds com o mesmo SDK,
+# então usar ?v=<build-id> ainda colide com cache antigo. Usa-se hash do
+# CONTEÚDO de cada arquivo: se o build mudou, a URL muda e CDN/navegador
+# buscam a versão nova (sem precisar purgar cache).
+RUN sed -i "s|main\.dart\.js|main.dart.js?v=$(md5sum /src/app/build/web/main.dart.js | cut -c1-12)|g" /src/app/build/web/flutter_bootstrap.js && \
+    sed -i "s|flutter_bootstrap\.js|flutter_bootstrap.js?v=$(md5sum /src/app/build/web/flutter_bootstrap.js | cut -c1-12)|g" /src/app/build/web/index.html
 
 # ---------- 2. Servidor web (Nginx) ----------
 FROM nginx:alpine AS web

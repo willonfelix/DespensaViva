@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/pantry_item.dart';
+import '../../models/pending_change.dart';
 import '../pantry/pantry_controller.dart';
 import '../products/add_product_screen.dart';
 
@@ -49,6 +50,10 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
       return matchesSearch && matchesCategory;
     }).toList();
 
+    final pendingIds = state.pending.map((p) => p.pantryItemId).toSet();
+    final pendingByItem = {for (final p in state.pending) p.pantryItemId: p};
+    final hasPending = state.pendingCount > 0;
+
     return Scaffold(
       body: Column(
         children: [
@@ -75,6 +80,31 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
                   onChanged: (value) => setState(() => _searchQuery = value),
                 ),
                 const SizedBox(height: 10),
+                if (hasPending) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.amber.shade400),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.pending_actions,
+                            size: 18, color: Colors.amber.shade800),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${state.pendingCount} alteração(ões) pendente(s). Confirme em Perfil p/ aplicar.',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.amber.shade900),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -103,7 +133,7 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
             ),
           ),
           Expanded(
-            child: _buildList(state.loading && items.isEmpty, filtered, items.isEmpty),
+            child: _buildList(state.loading && items.isEmpty, filtered, items.isEmpty, pendingByItem),
           ),
         ],
       ),
@@ -123,7 +153,12 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
     return set.toList();
   }
 
-  Widget _buildList(bool loading, List<PantryItem> filtered, bool empty) {
+  Widget _buildList(
+    bool loading,
+    List<PantryItem> filtered,
+    bool empty,
+    Map<int, PendingChange> pendingByItem,
+  ) {
     if (loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -135,15 +170,22 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
     }
     return ListView.builder(
       itemCount: filtered.length,
-      itemBuilder: (context, index) => _PantryCard(item: filtered[index]),
+      itemBuilder: (context, index) {
+        final item = filtered[index];
+        return _PantryCard(
+          item: item,
+          pending: pendingByItem[item.id],
+        );
+      },
     );
   }
 }
 
 class _PantryCard extends ConsumerWidget {
   final PantryItem item;
+  final PendingChange? pending;
 
-  const _PantryCard({required this.item});
+  const _PantryCard({required this.item, this.pending});
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
@@ -220,6 +262,24 @@ class _PantryCard extends ConsumerWidget {
                         .join(' • '),
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
+                  if (pending != null) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade100,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Pendente: ${PantryController.format(pending!.newQuantity, pending!.unitOfMeasure)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.amber.shade900,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 6),
                   Row(
                     children: [

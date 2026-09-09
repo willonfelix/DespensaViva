@@ -68,6 +68,11 @@ router.post('/login', async (req, res, next) => {
 
     delete user.password_hash;
     const token = signToken(user);
+    await db.query(
+      `INSERT INTO audit_logs (user_id, environment_id, action, entity, entity_id, details)
+       VALUES ($1, NULL, 'auth.login', 'user', $2, $3)`,
+      [user.id, String(user.id), JSON.stringify({ email: user.email })]
+    );
     return res.json({ token, user });
   } catch (err) {
     return next(err);

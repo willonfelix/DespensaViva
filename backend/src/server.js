@@ -12,6 +12,7 @@ const shoppingRoutes = require('./routes/shopping');
 const profileRoutes = require('./routes/profile');
 const suggestionRoutes = require('./routes/suggestions');
 const barcodeRoutes = require('./routes/barcode');
+const auditRoutes = require('./routes/audit');
 
 const app = express();
 
@@ -31,6 +32,7 @@ app.use('/api/shopping-list', shoppingRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/suggestions', suggestionRoutes);
 app.use('/api/barcode', barcodeRoutes);
+app.use('/api/audit', auditRoutes);
 
 // 404 para rotas desconhecidas
 app.use((req, res) => {

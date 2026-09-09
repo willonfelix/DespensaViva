@@ -7,6 +7,14 @@ const router = express.Router();
 router.use(requireAuth);
 router.use(requireEnvironment);
 
+function insertAudit(client, userId, environmentId, action, entity, entityId, details) {
+  return client.query(
+    `INSERT INTO audit_logs (user_id, environment_id, action, entity, entity_id, details)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [userId, environmentId, action, entity, entityId, details ? JSON.stringify(details) : null]
+  );
+}
+
 // Garante que o item entra na lista de compras se quantity <= min_quantity
 async function syncShoppingList(client, environmentId, productId, productName, unitOfMeasure, quantity, minQuantity) {
   if (Number(quantity) <= Number(minQuantity)) {
@@ -113,6 +121,15 @@ router.post('/', async (req, res, next) => {
       );
 
       await syncShoppingList(client, req.environmentId, productId, null, unit, qty, minQty);
+      await insertAudit(
+        client,
+        req.userId,
+        req.environmentId,
+        'pantry.add',
+        'pantry_item',
+        String(productId),
+        { name: String(name).trim(), unit, quantity: qty }
+      );
       res.status(201).json({
         item: {
           id: item.rows[0].id,
@@ -196,16 +213,173 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
+// POST /api/pantry/pending — pendências de quantidade do usuário no ambiente ativo
+router.get('/pending', async (req, res, next) => {
+  try {
+    const result = await db.query(
+      `SELECT pc.id, pc.pantry_item_id AS "pantryItemId",
+              p.name, p.unit_of_measure AS "unitOfMeasure",
+              pi.quantity AS "currentQuantity", pc.new_quantity AS "newQuantity"
+       FROM pending_quantity_changes pc
+       JOIN pantry_items pi ON pi.id = pc.pantry_item_id
+       JOIN products p ON p.id = pi.product_id
+       WHERE pc.environment_id = $1 AND pc.user_id = $2
+       ORDER BY pc.created_at DESC`,
+      [req.environmentId, req.userId]
+    );
+    return res.json({ pending: result.rows });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// POST /api/pantry/confirm — aplica pendências do usuário, atualiza estoque e audita
+router.post('/confirm', async (req, res, next) => {
+  try {
+    const applied = await db.transaction(async (client) => {
+      const pendings = await client.query(
+        `SELECT pc.id AS pending_id, pc.pantry_item_id AS "pantryItemId",
+                pc.new_quantity AS "newQuantity",
+                pi.quantity AS "currentQuantity", pi.min_quantity AS "minQuantity",
+                p.id AS "productId", p.name, p.unit_of_measure AS "unitOfMeasure"
+         FROM pending_quantity_changes pc
+         JOIN pantry_items pi ON pi.id = pc.pantry_item_id
+         JOIN products p ON p.id = pi.product_id
+         WHERE pc.environment_id = $1 AND pc.user_id = $2`,
+        [req.environmentId, req.userId]
+      );
+
+      const appliedItems = [];
+      for (const row of pendings.rows) {
+        const oldQty = Number(row.currentQuantity);
+        const newQty = Number(row.newQuantity);
+        await client.query(
+          'UPDATE pantry_items SET quantity = $1 WHERE id = $2',
+          [newQty, row.pantryItemId]
+        );
+        await syncShoppingList(
+          client,
+          req.environmentId,
+          row.productId,
+          null,
+          row.unitOfMeasure,
+          newQty,
+          Number(row.minQuantity)
+        );
+        await insertAudit(
+          client,
+          req.userId,
+          req.environmentId,
+          'pantry.quantity_change',
+          'pantry_item',
+          String(row.pantryItemId),
+          { name: row.name, unit: row.unitOfMeasure, old_quantity: oldQty, new_quantity: newQty }
+        );
+        await client.query('DELETE FROM pending_quantity_changes WHERE id = $1', [row.pending_id]);
+        appliedItems.push({
+          pantryItemId: row.pantryItemId,
+          name: row.name,
+          unitOfMeasure: row.unitOfMeasure,
+          oldQuantity: oldQty,
+          newQuantity: newQty,
+        });
+      }
+      return appliedItems;
+    });
+
+    return res.json({ applied: applied.length, items: applied });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// POST /api/pantry/:id/stage — grava pendência de mudança de quantidade
+router.post('/:id/stage', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { quantity } = req.body || {};
+    const newQty = Number(quantity);
+    if (quantity == null || !Number.isFinite(newQty) || newQty < 0) {
+      return res.status(400).json({ error: 'Informe uma quantidade válida.' });
+    }
+
+    const current = await db.query(
+      'SELECT id, quantity FROM pantry_items WHERE id = $1 AND environment_id = $2',
+      [id, req.environmentId]
+    );
+    if (current.rows.length === 0) {
+      return res.status(404).json({ error: 'Item não encontrado na dispensa.' });
+    }
+
+    const currentQty = Number(current.rows[0].quantity);
+    if (newQty === currentQty) {
+      await db.query(
+        'DELETE FROM pending_quantity_changes WHERE pantry_item_id = $1 AND user_id = $2',
+        [id, req.userId]
+      );
+      return res.json({ status: 'cleared' });
+    }
+
+    await db.query(
+      `INSERT INTO pending_quantity_changes (environment_id, user_id, pantry_item_id, new_quantity)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, pantry_item_id)
+       DO UPDATE SET new_quantity = EXCLUDED.new_quantity, created_at = CURRENT_TIMESTAMP`,
+      [req.environmentId, req.userId, id, newQty]
+    );
+    return res.json({ status: 'staged', new_quantity: newQty });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// DELETE /api/pantry/pending/:id — cancela uma pendência
+router.delete('/pending/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    await db.query(
+      'DELETE FROM pending_quantity_changes WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    return res.status(204).end();
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.delete('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const result = await db.query(
-      'DELETE FROM pantry_items WHERE id = $1 AND environment_id = $2 RETURNING id',
+    const current = await db.query(
+      `SELECT pi.id, p.name, pi.product_id, p.unit_of_measure AS "unitOfMeasure", pi.quantity
+       FROM pantry_items pi
+       JOIN products p ON p.id = pi.product_id
+       WHERE pi.id = $1 AND pi.environment_id = $2`,
       [id, req.environmentId]
     );
-    if (result.rows.length === 0) {
+    if (current.rows.length === 0) {
       return res.status(404).json({ error: 'Item não encontrado na dispensa.' });
     }
+    const row = current.rows[0];
+    await db.transaction(async (client) => {
+      await client.query(
+        'DELETE FROM pending_quantity_changes WHERE pantry_item_id = $1 AND environment_id = $2',
+        [id, req.environmentId]
+      );
+      await client.query(
+        'DELETE FROM pantry_items WHERE id = $1 AND environment_id = $2',
+        [id, req.environmentId]
+      );
+      await insertAudit(
+        client,
+        req.userId,
+        req.environmentId,
+        'pantry.delete',
+        'pantry_item',
+        String(id),
+        { name: row.name, unit: row.unitOfMeasure, quantity: row.quantity }
+      );
+    });
     return res.status(204).end();
   } catch (err) {
     return next(err);

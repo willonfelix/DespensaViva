@@ -2,26 +2,33 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/pantry_item.dart';
+import '../../models/pending_change.dart';
 import '../../core/network/api_client.dart';
 
 class PantryState {
   final List<PantryItem> items;
+  final List<PendingChange> pending;
   final bool loading;
   final String? error;
 
   const PantryState({
     this.items = const [],
+    this.pending = const [],
     this.loading = false,
     this.error,
   });
 
+  int get pendingCount => pending.length;
+
   PantryState copyWith({
     List<PantryItem>? items,
+    List<PendingChange>? pending,
     bool? loading,
     String? error,
   }) =>
       PantryState(
         items: items ?? this.items,
+        pending: pending ?? this.pending,
         loading: loading ?? this.loading,
         error: error,
       );
@@ -33,11 +40,15 @@ class PantryController extends StateNotifier<PantryState> {
   Future<void> load() async {
     state = state.copyWith(loading: true, error: null);
     try {
-      final response = await ApiClient.dio.get('/pantry');
-      final items = (response.data['items'] as List)
+      final itemsResponse = await ApiClient.dio.get('/pantry');
+      final pendingResponse = await ApiClient.dio.get('/pantry/pending');
+      final items = (itemsResponse.data['items'] as List)
           .map((e) => PantryItem.fromJson(e as Map<String, dynamic>))
           .toList();
-      state = PantryState(items: items);
+      final pending = (pendingResponse.data['pending'] as List)
+          .map((e) => PendingChange.fromJson(e as Map<String, dynamic>))
+          .toList();
+      state = PantryState(items: items, pending: pending);
     } on DioException catch (e) {
       state = state.copyWith(loading: false, error: _message(e));
     } catch (_) {
@@ -45,29 +56,109 @@ class PantryController extends StateNotifier<PantryState> {
     }
   }
 
-  Future<void> increment(PantryItem item) =>
-      _updateQuantity(item, item.quantity + step(item.unitOfMeasure));
+  Future<void> increment(PantryItem item) async {
+    await _stageQuantity(item, _baseQuantity(item) + step(item.unitOfMeasure));
+  }
 
-  Future<void> decrement(PantryItem item) => _updateQuantity(
-        item,
-        (item.quantity - step(item.unitOfMeasure)).clamp(0, double.infinity).toDouble(),
-      );
+  Future<void> decrement(PantryItem item) async {
+    final base = _baseQuantity(item);
+    final newQuantity =
+        (base - step(item.unitOfMeasure)).clamp(0, double.infinity).toDouble();
+    await _stageQuantity(item, newQuantity);
+  }
 
-  Future<void> _updateQuantity(PantryItem item, double newQuantity) async {
-    // Atualização otimista
-    final items = state.items
-        .map((e) => e.id == item.id ? e.copyWith(quantity: newQuantity) : e)
-        .toList();
-    state = PantryState(items: items);
+  // Base do cálculo: usa a pendência já existente do item (se houver),
+  // acumulando múltiplos incrementos/decrementos antes da confirmação.
+  // Sem isso, a base vira sempre o estoque atual do servidor (que só muda
+  // após confirmar) e o 2º clique num item não faz efeito.
+  double _baseQuantity(PantryItem item) {
+    for (final p in state.pending) {
+      if (p.pantryItemId == item.id) return p.newQuantity;
+    }
+    return item.quantity;
+  }
 
+  Future<void> _stageQuantity(PantryItem item, double newQuantity) async {
+    state = state.copyWith(error: null);
+    _applyPendingLocally(item, newQuantity);
     try {
-      await ApiClient.dio.put('/pantry/${item.id}', data: {
+      await ApiClient.dio.post('/pantry/${item.id}/stage', data: {
         'quantity': newQuantity,
       });
-      await load();
+      _applyPendingLocally(item, newQuantity);
     } on DioException catch (e) {
       state = state.copyWith(error: _message(e));
+    } finally {
       await load();
+    }
+  }
+
+  // Atualiza a pendência local otimisticamente, dando feedback imediato
+  // (badge) e tornando cada novo clique acumulativo sobre o estado local.
+  // O load() em _stageQuantity reconciltia com o servidor (fonte da verdade).
+  void _applyPendingLocally(PantryItem item, double newQuantity) {
+    final itemId = item.id;
+    final others = state.pending.where((p) => p.pantryItemId != itemId).toList();
+
+    // Voltou ao valor atual do estoque -> pendência deixa de existir.
+    if (newQuantity == item.quantity) {
+      state = state.copyWith(pending: others);
+      return;
+    }
+
+    final existing = state.pending.firstWhere(
+      (p) => p.pantryItemId == itemId,
+      orElse: () => PendingChange(
+        id: 0,
+        pantryItemId: itemId,
+        name: item.name,
+        unitOfMeasure: item.unitOfMeasure,
+        currentQuantity: item.quantity,
+        newQuantity: newQuantity,
+      ),
+    );
+
+    state = state.copyWith(
+      pending: [
+        ...others,
+        existing.id != 0
+            ? PendingChange(
+                id: existing.id,
+                pantryItemId: existing.pantryItemId,
+                name: existing.name,
+                unitOfMeasure: existing.unitOfMeasure,
+                currentQuantity: existing.currentQuantity,
+                newQuantity: newQuantity,
+              )
+            : existing,
+      ],
+    );
+  }
+
+  Future<bool> confirmPending() async {
+    state = state.copyWith(error: null);
+    try {
+      await ApiClient.dio.post('/pantry/confirm');
+      await load();
+      return true;
+    } on DioException catch (e) {
+      state = state.copyWith(error: _message(e));
+      return false;
+    } catch (_) {
+      state = state.copyWith(error: 'Erro ao confirmar alterações.');
+      return false;
+    }
+  }
+
+  Future<bool> cancelPending(int id) async {
+    state = state.copyWith(error: null);
+    try {
+      await ApiClient.dio.delete('/pantry/pending/$id');
+      await load();
+      return true;
+    } on DioException catch (e) {
+      state = state.copyWith(error: _message(e));
+      return false;
     }
   }
 

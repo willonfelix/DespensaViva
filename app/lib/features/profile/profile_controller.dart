@@ -2,21 +2,39 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/api_client.dart';
+import '../../models/audit_entry.dart';
 import '../../models/user.dart';
 import '../auth/auth_controller.dart';
+import '../pantry/pantry_controller.dart';
 
 class ProfileState {
   final bool loading;
   final String? error;
   final String? success;
+  final List<AuditEntry> logs;
+  final bool loadingAudit;
 
-  const ProfileState({this.loading = false, this.error, this.success});
+  const ProfileState({
+    this.loading = false,
+    this.error,
+    this.success,
+    this.logs = const [],
+    this.loadingAudit = false,
+  });
 
-  ProfileState copyWith({bool? loading, String? error, String? success}) =>
+  ProfileState copyWith({
+    bool? loading,
+    String? error,
+    String? success,
+    List<AuditEntry>? logs,
+    bool? loadingAudit,
+  }) =>
       ProfileState(
         loading: loading ?? this.loading,
         error: error ?? this.error,
-        success: success,
+        success: success ?? this.success,
+        logs: logs ?? this.logs,
+        loadingAudit: loadingAudit ?? this.loadingAudit,
       );
 }
 
@@ -63,7 +81,34 @@ class ProfileController extends StateNotifier<ProfileState> {
     }
   }
 
-  void clearFeedback() => state = const ProfileState();
+  void clearFeedback() => state = ProfileState(logs: state.logs);
+
+  Future<bool> confirmPending() async {
+    state = state.copyWith(loading: true, error: null, success: null);
+    final ok = await _ref.read(pantryControllerProvider.notifier).confirmPending();
+    state = state.copyWith(
+      loading: false,
+      success: ok ? 'Alterações da dispensa confirmadas.' : null,
+      error: ok ? null : (state.error ?? 'Erro ao confirmar alterações.'),
+    );
+    if (ok) await loadAudit();
+    return ok;
+  }
+
+  Future<void> loadAudit() async {
+    state = state.copyWith(loadingAudit: true, error: null);
+    try {
+      final response = await ApiClient.dio.get('/audit');
+      final logs = (response.data['logs'] as List)
+          .map((e) => AuditEntry.fromJson(e as Map<String, dynamic>))
+          .toList();
+      state = state.copyWith(loadingAudit: false, logs: logs);
+    } on DioException catch (e) {
+      state = state.copyWith(loadingAudit: false, error: _message(e), logs: const []);
+    } catch (_) {
+      state = state.copyWith(loadingAudit: false, error: 'Erro ao carregar histórico.', logs: const []);
+    }
+  }
 
   void _updateAuthHasKey(bool value) {
     final auth = _ref.read(authControllerProvider);
