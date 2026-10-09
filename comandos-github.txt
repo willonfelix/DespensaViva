@@ -1,0 +1,64 @@
+Aqui está um passo a passo simples para você trabalhar com branches no GitHub usando Git:
+
+### 🚀 Criar e mudar para uma branch
+```bash
+# Criar uma nova branch chamada "minha-branch"
+git branch minha-branch
+
+# Mudar para a nova branch
+git checkout minha-branch
+```
+
+👉 Dica: você pode fazer isso em um único comando:
+```bash
+git checkout -b minha-branch
+```
+
+---
+
+### 📂 Adicionar e enviar arquivos para a branch
+```bash
+# Adicionar todos os arquivos modificados
+git add .
+
+# Criar um commit com mensagem
+git commit -m "Adicionando meus arquivos"
+
+# Enviar para o repositório remoto (GitHub)
+git push origin minha-branch
+```
+
+---
+
+### 🔄 Subir alterações para a branch `main`
+Existem duas formas principais:
+
+1. **Direto para `main` (sem Pull Request):**
+```bash
+# Mudar para a branch main
+git checkout main
+
+# Trazer atualizações do remoto
+git pull origin main
+
+# Mesclar a branch criada
+git merge minha-branch
+
+# Enviar para o GitHub
+git push origin main
+```
+
+2. **Via Pull Request (recomendado):**
+- Depois de dar `git push origin minha-branch`, vá até o GitHub.
+- O site vai sugerir criar um **Pull Request**.
+- Crie o PR e, após revisão, faça o merge para `main`.
+
+---
+
+### 📝 Resumindo
+1. `git checkout -b minha-branch` → cria e muda para a branch.  
+2. `git add . && git commit -m "msg"` → adiciona e confirma mudanças.  
+3. `git push origin minha-branch` → envia para o GitHub.  
+4. Merge para `main` via `git merge` ou Pull Request.  
+
+Quer que eu te mostre também como configurar o **branch padrão** no GitHub (para que `main` seja sempre usado em vez de `master`)?

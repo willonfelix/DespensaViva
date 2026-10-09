@@ -26,5 +26,5 @@ Ajudamos famílias a economizarem dinheiro, otimizarem o tempo no supermercado e
 ------------------------------
 ## 💡 Dicas para usar essa história:
 
-* Na página "Sobre Nós" (despensa.seu-dominio.com.br): Use a versão completa para conectar o usuário com o propósito do app.
+* Na página "Sobre Nós" (despensa.wikicode.com.br): Use a versão completa para conectar o usuário com o propósito do app.
 * Em Pitches de Negócios: Foque no "Ponto de Partida" e na "Descoberta do Problema" (com dados de mercado) para mostrar o tamanho da oportunidade.

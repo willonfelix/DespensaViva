@@ -6,7 +6,9 @@ import '../environment/environment_controller.dart';
 import '../environment/environment_detail_screen.dart';
 import '../environment/environment_list_screen.dart';
 import '../pantry/pantry_screen.dart';
+import '../profile/profile_screen.dart';
 import '../shopping/shopping_list_screen.dart';
+import '../suggestions/suggestions_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -71,6 +73,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         centerTitle: true,
         actions: [
           IconButton(
+            icon: const Icon(Icons.person_outline),
+            tooltip: 'Perfil',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            ),
+          ),
+          IconButton(
             icon: const Icon(Icons.group_outlined),
             tooltip: 'Membros',
             onPressed: () => Navigator.of(context).push(
@@ -91,12 +100,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         children: const [
           PantryScreen(),
           ShoppingListScreen(),
+          SuggestionsScreen(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (index) {
-          if (index == 2) {
+          if (index == 3) {
             Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const EnvironmentListScreen()),
             );
@@ -114,6 +124,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             icon: Icon(Icons.shopping_cart_outlined),
             selectedIcon: Icon(Icons.shopping_cart),
             label: 'Compras',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.lightbulb_outline),
+            selectedIcon: Icon(Icons.lightbulb),
+            label: 'Sugestões',
           ),
           NavigationDestination(
             icon: Icon(Icons.home_work_outlined),

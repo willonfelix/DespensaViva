@@ -100,6 +100,10 @@ class AuthController extends StateNotifier<AuthState> {
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
 
+  void updateUser(User user) {
+    state = state.copyWith(user: user);
+  }
+
   String _errorMessage(DioException e) {
     final data = e.response?.data;
     if (data is Map && data['error'] != null) {

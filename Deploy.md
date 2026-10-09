@@ -15,8 +15,8 @@
 ```
 Navegador
    │
-   ▼ https://despensa.seu-dominio.com.br
-   Caddy (80/443, TLS automático)  ── domínio: despensa.seu-dominio.com.br
+   ▼ https://despensa.wikicode.com.br
+   Caddy (80/443, TLS automático)  ── domínio: despensa.wikicode.com.br
    ├── /api/*  ──proxy──▶ backend:3007 (Node) ──▶ db (Postgres)
    └── (demais) ──proxy──▶ web:80 (Nginx serve estáticos do Flutter)
 ```
@@ -27,17 +27,17 @@ Navegador
 # 1. Copie e ajuste as variáveis (TROQUE JWT_SECRET e a senha do Postgres!)
 cp .env.example .env
 
-# 2. Edite .env: defina DOMAIN (ex.: despensa.seu-dominio.com.br), JWT_SECRET forte, senha do Postgres
+# 2. Edite .env: defina DOMAIN (ex.: despensa.wikicode.com.br), JWT_SECRET forte, senha do Postgres
 
 # 3. Suba tudo
 docker compose up -d --build
 
 # 4. Acesse
-# https://despensa.seu-dominio.com.br   (DNS deve apontar para este servidor)
+# https://despensa.wikicode.com.br   (DNS deve apontar para este servidor)
 ```
 
 ## Observações importantes
-1. **DNS:** aponte `despensa.seu-dominio.com.br` (A/AAAA) para o servidor antes de subir o Caddy; o Caddy emite o certificado Let's Encrypt automaticamente. Portas 80 e 443 devem estar liberadas no firewall.
+1. **DNS:** aponte `despensa.wikicode.com.br` (A/AAAA) para o servidor antes de subir o Caddy; o Caddy emite o certificado Let's Encrypt automaticamente. Portas 80 e 443 devem estar liberadas no firewall.
 2. **Certificado:** na primeira subida, o Caddy pede o certificado. Se o domínio ainda não apontar, o TLS pode falhar até o DNS resolver.
 3. **Banco:** na primeira subida, o Postgres aplica `backend/db/schema.sql` automaticamente (volume `pgdata`). Os dados persistem entre reinícios.
 4. **Produção:** TROQUE `JWT_SECRET` e a senha do Postgres no `.env` (os padrões no `.env.example` são inseguros).

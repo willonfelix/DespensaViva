@@ -1,0 +1,18 @@
+docker exec -it despensaviva_db psql -U postgres -d dispensa
+
+## Ver tabelas
+\dt
+
+## Ver registros
+SELECT * FROM public.categories;
+
+## Inserir registros
+INSERT INTO public.categories VALUES (9,'Outros');
+
+## Fazer backup
+docker exec -t despensaviva_db pg_dump -U postgres -F c dispensa > backup_dispensa.dump
+
+## Restaure backup
+docker exec -i meu-postgres pg_restore -U postgres -d dispensa backup_dispensa.dump
+
+

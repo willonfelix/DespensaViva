@@ -5,6 +5,7 @@ import '../../core/network/api_client.dart';
 import '../../models/environment.dart';
 import '../pantry/pantry_controller.dart';
 import '../shopping/shopping_controller.dart';
+import '../suggestions/suggestions_controller.dart';
 
 class EnvironmentState {
   final List<Environment> environments;
@@ -218,6 +219,9 @@ final environmentWatcherProvider = Provider<void>((ref) {
       if (next.activeEnvironmentId != null) {
         ref.read(pantryControllerProvider.notifier).load();
         ref.read(shoppingControllerProvider.notifier).load();
+        ref
+            .read(suggestionsControllerProvider.notifier)
+            .loadEnvironment(next.activeEnvironmentId!);
       }
     }
   });
