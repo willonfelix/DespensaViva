@@ -4,8 +4,9 @@ class AuditEntry {
   final String entity;
   final String? entityId;
   final Map<String, dynamic>? details;
-  final DateTime createdAt;
+final DateTime createdAt;
   final String? environment;
+  final String? userEmail;
 
   const AuditEntry({
     required this.id,
@@ -15,6 +16,7 @@ class AuditEntry {
     this.details,
     required this.createdAt,
     this.environment,
+    this.userEmail,
   });
 
   factory AuditEntry.fromJson(Map<String, dynamic> json) => AuditEntry(
@@ -25,8 +27,9 @@ class AuditEntry {
         details: json['details'] is Map
             ? (json['details'] as Map).map((k, v) => MapEntry(k.toString(), v))
             : null,
-        createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
+createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
         environment: json['environment']?.toString(),
+        userEmail: json['userEmail']?.toString(),
       );
 
   static int _toInt(dynamic v) =>

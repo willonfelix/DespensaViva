@@ -17,7 +17,7 @@ class EnvironmentListScreen extends ConsumerStatefulWidget {
 
 class _EnvironmentListScreenState extends ConsumerState<EnvironmentListScreen> {
   final _nameController = TextEditingController();
-  final Set<String> _generatingReportIds = <String>{};
+  String? _reportingEnvironmentId;
 
   @override
   void dispose() {
@@ -50,28 +50,26 @@ class _EnvironmentListScreenState extends ConsumerState<EnvironmentListScreen> {
   }
 
   Future<void> _openReport(String environmentId) async {
-    if (_generatingReportIds.contains(environmentId)) return;
-
-    setState(() => _generatingReportIds.add(environmentId));
+    if (_reportingEnvironmentId != null) return;
+    setState(() => _reportingEnvironmentId = environmentId);
     try {
-      final report = await StockReportService.fetch(environmentId);
+      final report = await StockReportService().generate(environmentId);
       if (!mounted) return;
-
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => StockReportScreen(report: report),
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => StockReportScreen(
+            environmentName: report.environmentName,
+            pdfBytes: report.pdfBytes,
+          ),
         ),
       );
-    } catch (err) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(err.toString().replaceFirst('Exception: ', ''))),
-      );
-    } finally {
+    } on StockReportException catch (error) {
       if (mounted) {
-        setState(() => _generatingReportIds.remove(environmentId));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
       }
+    } finally {
+      if (mounted) setState(() => _reportingEnvironmentId = null);
     }
   }
 
@@ -122,49 +120,35 @@ class _EnvironmentListScreenState extends ConsumerState<EnvironmentListScreen> {
                 itemCount: envs.length,
                 itemBuilder: (context, index) {
                   final env = envs[index];
-                  final isGenerating = _generatingReportIds.contains(env.id);
-
+                  final isReporting = _reportingEnvironmentId == env.id;
                   return Card(
                     margin: const EdgeInsets.symmetric(vertical: 6),
-                    child: InkWell(
+                    child: ListTile(
+                      leading: const Icon(Icons.kitchen),
+                      title: Text(env.name),
+                      subtitle: Text('${env.memberCount} membro(s)'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isReporting)
+                            const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          else
+                            TextButton(
+                              onPressed: _reportingEnvironmentId == null
+                                  ? () => _openReport(env.id)
+                                  : null,
+                              child: const Text('Relatório'),
+                            ),
+                          const Icon(Icons.chevron_right),
+                        ],
+                      ),
                       onTap: () => ref
                           .read(environmentControllerProvider.notifier)
                           .selectEnvironment(env.id),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.kitchen, size: 28),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    env.name,
-                                    style: Theme.of(context).textTheme.titleMedium,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text('${env.memberCount} membro(s)'),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            FilledButton.tonal(
-                              onPressed: isGenerating ? null : () => _openReport(env.id),
-                              child: isGenerating
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : const Text('Relatório'),
-                            ),
-                            const SizedBox(width: 4),
-                            const Icon(Icons.chevron_right),
-                          ],
-                        ),
-                      ),
                     ),
                   );
                 },

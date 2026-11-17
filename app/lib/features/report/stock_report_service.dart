@@ -6,16 +6,178 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../../core/network/api_client.dart';
 
-class StockReportItem {
-  const StockReportItem({
-    required this.name,
-    required this.category,
-    required this.quantity,
-    required this.unitOfMeasure,
-    required this.minQuantity,
-    this.expirationDate,
-  });
+class StockReportException implements Exception {
+  final String message;
 
+  const StockReportException(this.message);
+}
+
+class StockReport {
+  final String environmentName;
+  final Uint8List pdfBytes;
+
+  const StockReport({required this.environmentName, required this.pdfBytes});
+}
+
+class StockReportService {
+  final Dio _dio;
+
+  StockReportService({Dio? dio}) : _dio = dio ?? ApiClient.dio;
+
+  Future<StockReport> generate(String environmentId) async {
+    late final Response<dynamic> response;
+    try {
+      response = await _dio.get(
+        '/environments/${Uri.encodeComponent(environmentId)}/report',
+      );
+    } on DioException catch (error) {
+      final data = error.response?.data;
+      final message = data is Map && data['error'] is String
+          ? data['error'] as String
+          : 'Não foi possível carregar os dados do relatório.';
+      throw StockReportException(message);
+    }
+
+    final payload = response.data;
+    if (payload is! Map) {
+      throw const StockReportException('A resposta do relatório é inválida.');
+    }
+
+    final environment = payload['environment'];
+    final rawItems = payload['items'];
+    final generatedAt = DateTime.tryParse(
+      payload['generatedAt']?.toString() ?? '',
+    );
+    if (environment is! Map ||
+        environment['name'] is! String ||
+        rawItems is! List ||
+        generatedAt == null) {
+      throw const StockReportException('A resposta do relatório é inválida.');
+    }
+
+    final items = <_StockReportItem>[];
+    for (final rawItem in rawItems) {
+      if (rawItem is! Map) {
+        throw const StockReportException('A resposta do relatório é inválida.');
+      }
+      items.add(_StockReportItem.fromJson(Map<String, dynamic>.from(rawItem)));
+    }
+
+    final environmentName = environment['name'] as String;
+    try {
+      final pdfBytes = await _buildPdf(
+        environmentName: environmentName,
+        generatedAt: generatedAt,
+        items: items,
+      );
+      return StockReport(environmentName: environmentName, pdfBytes: pdfBytes);
+    } on Exception {
+      throw const StockReportException('Não foi possível gerar o arquivo PDF.');
+    }
+  }
+
+  static Future<Uint8List> _buildPdf({
+    required String environmentName,
+    required DateTime generatedAt,
+    required List<_StockReportItem> items,
+  }) async {
+    final document = pw.Document();
+    document.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (_) => [
+          pw.Text(
+            'Relatório de Itens do Estoque',
+            style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.SizedBox(height: 12),
+          pw.Text('Dispensa: $environmentName'),
+          pw.Text('Gerado em: ${_formatDateTime(generatedAt)}'),
+          pw.Text('Total de itens: ${items.length}'),
+          pw.SizedBox(height: 20),
+          if (items.isEmpty)
+            pw.Text('O estoque desta Dispensa está vazio.')
+          else
+            _itemsTable(items),
+        ],
+      ),
+    );
+    return document.save();
+  }
+
+  static pw.Widget _itemsTable(List<_StockReportItem> items) {
+    const headerStyle = pw.TextStyle(
+      fontWeight: pw.FontWeight.bold,
+      fontSize: 9,
+    );
+    const cellStyle = pw.TextStyle(fontSize: 9);
+
+    pw.Widget cell(String value, {bool header = false}) => pw.Padding(
+      padding: const pw.EdgeInsets.all(5),
+      child: pw.Text(value, style: header ? headerStyle : cellStyle),
+    );
+
+    return pw.Table(
+      border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+      columnWidths: const {
+        0: pw.FlexColumnWidth(2.2),
+        1: pw.FlexColumnWidth(1.7),
+        2: pw.FlexColumnWidth(1.5),
+        3: pw.FlexColumnWidth(1.5),
+        4: pw.FlexColumnWidth(1.5),
+      },
+      children: [
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+          children: [
+            cell('Produto', header: true),
+            cell('Categoria', header: true),
+            cell('Quantidade', header: true),
+            cell('Mínimo', header: true),
+            cell('Validade', header: true),
+          ],
+        ),
+        ...items.map(
+          (item) => pw.TableRow(
+            children: [
+              cell(item.name),
+              cell(item.category),
+              cell(_formatQuantity(item.quantity, item.unitOfMeasure)),
+              cell(_formatQuantity(item.minQuantity, item.unitOfMeasure)),
+              cell(_formatDate(item.expirationDate)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _formatDateTime(DateTime value) {
+    final local = value.toLocal();
+    return '${_twoDigits(local.day)}/${_twoDigits(local.month)}/${local.year} '
+        '${_twoDigits(local.hour)}:${_twoDigits(local.minute)}';
+  }
+
+  static String _formatDate(DateTime? date) {
+    if (date == null) return 'Não informada';
+    return '${_twoDigits(date.day)}/${_twoDigits(date.month)}/${date.year}';
+  }
+
+  static String _formatQuantity(double quantity, String unit) {
+    final formatted = quantity % 1 == 0
+        ? quantity.toStringAsFixed(0)
+        : quantity
+              .toStringAsFixed(2)
+              .replaceFirst(RegExp(r'0+$'), '')
+              .replaceFirst(RegExp(r'\.$'), '');
+    return '$formatted $unit';
+  }
+
+  static String _twoDigits(int value) => value.toString().padLeft(2, '0');
+}
+
+class _StockReportItem {
   final String name;
   final String category;
   final double quantity;
@@ -23,172 +185,40 @@ class StockReportItem {
   final double minQuantity;
   final DateTime? expirationDate;
 
-  String get displayCategory => category.trim().isEmpty ? 'Sem categoria' : category.trim();
-
-  String get displayExpirationDate =>
-      expirationDate == null ? 'Não informada' : _formatDate(expirationDate!);
-
-  String get displayQuantity =>
-      '${_formatNumber(quantity)} ${unitOfMeasure.trim().isEmpty ? 'unidade' : unitOfMeasure.trim()}';
-
-  String get displayMinQuantity =>
-      '${_formatNumber(minQuantity)} ${unitOfMeasure.trim().isEmpty ? 'unidade' : unitOfMeasure.trim()}';
-
-  factory StockReportItem.fromJson(Map<String, dynamic> json) => StockReportItem(
-        name: (json['name'] as String?) ?? '',
-        category: (json['category'] as String?) ?? '',
-        quantity: _toDouble(json['quantity']),
-        unitOfMeasure: (json['unitOfMeasure'] as String?) ?? 'unidade',
-        minQuantity: _toDouble(json['minQuantity']),
-        expirationDate: json['expirationDate'] == null
-            ? null
-            : DateTime.tryParse(json['expirationDate'] as String),
-      );
-
-  static double _toDouble(dynamic value) =>
-      value is num ? value.toDouble() : double.tryParse(value?.toString() ?? '') ?? 0;
-
-  static String _formatDate(DateTime date) =>
-      '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
-
-  static String _formatNumber(double value) {
-    if (value % 1 == 0) return value.toInt().toString();
-    final text = value.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
-    return text;
-  }
-}
-
-class StockReport {
-  const StockReport({
-    required this.environmentId,
-    required this.environmentName,
-    required this.generatedAt,
-    required this.items,
+  const _StockReportItem({
+    required this.name,
+    required this.category,
+    required this.quantity,
+    required this.unitOfMeasure,
+    required this.minQuantity,
+    required this.expirationDate,
   });
 
-  final String environmentId;
-  final String environmentName;
-  final DateTime generatedAt;
-  final List<StockReportItem> items;
+  factory _StockReportItem.fromJson(Map<String, dynamic> json) =>
+      _StockReportItem(
+        name: json['name']?.toString() ?? '',
+        category: json['category']?.toString().isNotEmpty == true
+            ? json['category'].toString()
+            : 'Sem categoria',
+        quantity: _requiredQuantity(json['quantity']),
+        unitOfMeasure: json['unitOfMeasure']?.toString() ?? 'unidade',
+        minQuantity: _requiredQuantity(json['minQuantity']),
+        expirationDate: _parseDate(json['expirationDate']),
+      );
 
-  int get totalItems => items.length;
-
-  static String _cleanString(dynamic value) {
-    if (value == null) return '';
-    return value.toString().trim();
-  }
-
-  factory StockReport.fromJson(Map<String, dynamic> json) {
-    final environment = json['environment'] as Map<String, dynamic>? ?? const {};
-    final reportItems = (json['items'] as List? ?? const [])
-        .map((item) => StockReportItem.fromJson(item as Map<String, dynamic>))
-        .toList();
-
-    reportItems.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-
-    return StockReport(
-      environmentId: _cleanString(environment['id']),
-      environmentName:
-          _cleanString(environment['name']) == '' ? 'Dispensa' : _cleanString(environment['name']),
-      generatedAt: DateTime.tryParse((json['generatedAt'] as String?) ?? '') ?? DateTime.now(),
-      items: reportItems,
-    );
-  }
-}
-
-class StockReportService {
-  const StockReportService._();
-
-  static Future<StockReport> fetch(String environmentId) async {
-    try {
-      final response = await ApiClient.dio.get('/environments/$environmentId/report');
-      return StockReport.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (error) {
-      final serverMessage = error.response?.data is Map<String, dynamic>
-          ? error.response?.data['error']
-          : null;
-      throw Exception(serverMessage ?? 'Não foi possível gerar o relatório.');
+  static double _requiredQuantity(dynamic value) {
+    final quantity = value is num
+        ? value.toDouble()
+        : double.tryParse(value?.toString() ?? '');
+    if (quantity == null || !quantity.isFinite) {
+      throw const StockReportException('A resposta do relatório é inválida.');
     }
+    return quantity;
   }
 
-  static Future<Uint8List> generatePdf(
-    StockReport report, [
-    PdfPageFormat format = PdfPageFormat.a4,
-  ]) async {
-    final pdf = pw.Document();
-
-    pdf.addPage(
-      pw.Page(
-        pageFormat: format,
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text(
-                'Relatório de Itens do Estoque',
-                style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
-              ),
-              pw.SizedBox(height: 12),
-              pw.Text('Dispensa: ${report.environmentName}'),
-              pw.Text('Gerado em: ${_formatDateTime(report.generatedAt)}'),
-              pw.Text('Total de itens: ${report.totalItems}'),
-              pw.SizedBox(height: 20),
-              if (report.items.isEmpty)
-                pw.Container(
-                  width: double.infinity,
-                  padding: const pw.EdgeInsets.all(20),
-                  decoration: pw.BoxDecoration(
-                    color: PdfColors.grey200,
-                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-                  ),
-                  child: pw.Text(
-                    'Este estoque está vazio no momento.',
-                    style: const pw.TextStyle(fontSize: 14),
-                    textAlign: pw.TextAlign.center,
-                  ),
-                )
-              else
-                pw.Table.fromTextArray(
-                  headers: ['Produto', 'Categoria', 'Quantidade', 'Mínimo', 'Validade'],
-                  data: report.items
-                      .map(
-                        (item) => [
-                          item.name,
-                          item.displayCategory,
-                          item.displayQuantity,
-                          item.displayMinQuantity,
-                          item.displayExpirationDate,
-                        ],
-                      )
-                      .toList(),
-                  border: null,
-                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                  cellStyle: const pw.TextStyle(fontSize: 9),
-                  headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
-                  cellAlignments: {
-                    0: pw.Alignment.centerLeft,
-                    1: pw.Alignment.centerLeft,
-                    2: pw.Alignment.centerRight,
-                    3: pw.Alignment.centerRight,
-                    4: pw.Alignment.centerLeft,
-                  },
-                ),
-            ],
-          );
-        },
-      ),
-    );
-
-    return pdf.save();
-  }
-
-  static String _formatDateTime(DateTime dateTime) {
-    final local = dateTime.toLocal();
-    final day = local.day.toString().padLeft(2, '0');
-    final month = local.month.toString().padLeft(2, '0');
-    final year = local.year;
-    final hour = local.hour.toString().padLeft(2, '0');
-    final minute = local.minute.toString().padLeft(2, '0');
-    return '$day/$month/$year $hour:$minute';
+  static DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    return DateTime.tryParse(value.toString());
   }
 }
