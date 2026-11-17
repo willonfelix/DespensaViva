@@ -1,5 +1,26 @@
 # Log de Deploy — DespensaViva
 
+---
+
+# Deploy 2026-09-09 — auditoria com email + rebuild geral
+
+## Mudanças incluídas
+- Histórico de auditoria mostra email de quem efetuou a ação.
+- Query `/api/audit` agora lista logs de todos os membros do ambiente (antes: só do usuário logado). `userEmail` via JOIN `users`.
+
+## Execução
+- `docker compose build` → Flutter web compilou + backend OK.
+- `docker compose up -d --force-recreate` → 5 containers (db, backend, web, caddy, tunnel).
+- Migrations rodam no startup do backend (tabela `audit_logs` ok).
+
+## Verificação
+- `https://despensa.wikicode.com.br/` → 200, `flutter_bootstrap.js?v=fa5f693328ab` (build novo).
+- `https://despensa.wikicode.com.br/api/health` → `{"status":"ok",...}`.
+- Teste e2e: login + `GET /api/audit` retornou `userEmail` preenchido e entry `auth.login` (env NULL) visível. Usuário teste removido após validação.
+- Obs: 502 nos primeiros ~8s no cold start do tunnel (registro de conexões), depois 200.
+
+---
+
 Data: 2026-09-03
 
 ## Problema

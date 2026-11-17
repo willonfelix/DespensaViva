@@ -45,12 +45,13 @@ services:
     restart: unless-stopped
 
   caddy:
-    image: caddy:2-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
     container_name: despensaviva_caddy
     environment:
       DOMAIN: ${DOMAIN:-despensa.wikicode.com.br}
     volumes:
-      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
@@ -64,7 +65,7 @@ services:
     depends_on:
       - caddy
     environment:
-      TUNNEL_TOKEN: eyJhIjoiNWM2ZWJlMGNiMTdkNGFlNjc3NTg1MzM3YmE3MjVjM2EiLCJ0IjoiYWZkY2NjYzYtODdkNC00N2Y4LTg0NTUtMmI4ZjQ2MDQ0OWUwIiwicyI6IlpUUTFOakJoT1RRdFlUSXlZUzAwTTJZeUxUa3hPVGd0TVdFelkySTNOR1U1TlRBeiJ9
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in .env}
     command: tunnel --no-autoupdate run
     network_mode: "service:caddy"
     restart: unless-stopped

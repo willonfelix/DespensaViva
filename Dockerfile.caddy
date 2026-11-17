@@ -1,0 +1,4 @@
+# Syntax= docker/dockerfile:1
+
+FROM caddy:2-alpine
+COPY docker/Caddyfile /etc/caddy/Caddyfile

@@ -42,6 +42,62 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+// GET /api/environments/:id/report
+router.get('/:id/report', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const environment = await db.query(
+      'SELECT id, name FROM environments WHERE id = $1',
+      [id]
+    );
+    if (environment.rows.length === 0) {
+      return res.status(404).json({ error: 'Ambiente não encontrado.' });
+    }
+
+    const member = await db.query(
+      'SELECT role FROM environment_members WHERE environment_id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (member.rows.length === 0) {
+      return res.status(403).json({ error: 'Acesso negado a este ambiente.' });
+    }
+
+    const items = await db.query(
+      `SELECT p.name,
+              c.name AS category,
+              pi.quantity,
+              p.unit_of_measure AS "unitOfMeasure",
+              pi.min_quantity AS "minQuantity",
+              pi.expiration_date AS "expirationDate"
+       FROM pantry_items pi
+       JOIN products p ON p.id = pi.product_id
+       LEFT JOIN categories c ON c.id = p.category_id
+       WHERE pi.environment_id = $1
+       ORDER BY LOWER(p.name) ASC`,
+      [id]
+    );
+
+    return res.json({
+      environment: {
+        id: environment.rows[0].id,
+        name: environment.rows[0].name,
+      },
+      generatedAt: new Date().toISOString(),
+      items: items.rows.map((item) => ({
+        name: item.name,
+        category: item.category,
+        quantity: Number(item.quantity),
+        unitOfMeasure: item.unitOfMeasure || 'unidade',
+        minQuantity: Number(item.minQuantity),
+        expirationDate: item.expirationDate ? new Date(item.expirationDate).toISOString() : null,
+      })),
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // GET /api/environments/:id
 router.get('/:id', async (req, res, next) => {
   try {

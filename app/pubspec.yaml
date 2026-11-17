@@ -39,6 +39,11 @@ dependencies:
   flutter_secure_storage: ^11.0.0
   flutter_markdown: ^0.7.1
   mobile_scanner: ^7.4.0
+  pdf: ^3.11.3
+  printing: ^5.15.1
+
+dependency_overrides:
+  archive: ^4.7.1
 
 dev_dependencies:
   flutter_test:
